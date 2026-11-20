@@ -53,7 +53,7 @@ jobs:
         if: runner.os == 'macOS'
         with:
           name: lfgplus-helper-macOS-app
-          path: dist/lfgplus-helper-macos.zip
+          path: dist/lfgplus-helper-macos.dmg
           if-no-files-found: error
 
   release:
@@ -76,7 +76,7 @@ jobs:
         run: |
           mkdir dist
           mv built/lfgplus-helper-Windows/lfgplus-helper.exe dist/lfgplus-helper-windows.exe
-          mv built/lfgplus-helper-macOS-app/lfgplus-helper-macos.zip dist/lfgplus-helper-macos.zip
+          mv built/lfgplus-helper-macOS-app/lfgplus-helper-macos.dmg dist/lfgplus-helper-macos.dmg
           mv built/lfgplus-helper-Linux/lfgplus-helper dist/lfgplus-helper-linux
           ls -l dist
       - name: Publish the release

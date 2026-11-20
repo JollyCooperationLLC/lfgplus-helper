@@ -38,7 +38,7 @@ A few things to know:
    [Getting started](https://github.com/JollyCooperationLLC/lfgplus-addon#getting-started)).
 2. **Get the helper** from the [Releases](https://github.com/JollyCooperationLLC/lfgplus-helper/releases) page:
    - Windows: `lfgplus-helper-windows.exe`.
-   - macOS: `lfgplus-helper-macos.zip`. Open it and drag **LFG+ Helper** into your Applications folder.
+   - macOS: `lfgplus-helper-macos.dmg`. Open it and drag **LFG+ Helper** onto the Applications folder beside it.
    - Linux: `lfgplus-helper-linux`. Make it runnable with `chmod +x lfgplus-helper-linux`.
 
    You can also build it yourself (see Development).
@@ -60,8 +60,9 @@ The Mac app isn't notarized by Apple, so the first time you open it macOS stops 
 3. Confirm with your password or Touch ID.
 
 From then on it opens normally and lives in the menu bar, with no Dock icon. Run it from Applications, not from the
-zip or your Downloads folder: macOS runs apps it hasn't checked from a temporary copy, so the menu shows **Move to
-Applications to start with your Mac** until you do.
+disk image or your Downloads folder: the app can't start with your Mac from there, so the menu shows **Move to
+Applications to start with your Mac** until you do. Once it's in Applications, you can eject the disk image and
+delete it.
 
 ## Menu
 
@@ -132,7 +133,7 @@ assets/app.ico      the .exe's icon: the LFG+ wordmark from 48 px up, the bubble
 assets/app.icns     the Mac app's icon: the same drawing, sized for macOS
 build.rs            puts app.ico, the name and the publisher into the Windows .exe
 tools/make-icon.py  draws app.ico and app.icns (Pillow and Inter's variable font; both are committed)
-tools/package-macos.sh  builds LFG+ Helper.app around a macOS build, signs it ad hoc and zips it
+tools/package-macos.sh  builds LFG+ Helper.app around a macOS build, signs it ad hoc and puts it in a disk image
 tests/              the whole pass on a fake World of Warcraft folder, and uploads against a local server
 .github/workflows/  build.yml: format, lint, tests and builds on Windows, macOS and Linux; a release on every push to main
 ```

@@ -1,11 +1,12 @@
 #!/usr/bin/env bash
-# Builds "LFG+ Helper.app" around a macOS build of the helper, signs it ad hoc (no Apple account) and zips it.
+# Builds "LFG+ Helper.app" around a macOS build of the helper, signs it ad hoc (no Apple account) and puts it in a
+# disk image beside a shortcut to Applications.
 #
 #   tools/package-macos.sh VERSION BINARY
 #   tools/package-macos.sh 2026.11.20.090442 target/universal/lfgplus-helper
 #
-# VERSION is year.month.day.hourminutesecond. Writes dist/LFG+ Helper.app and dist/lfgplus-helper-macos.zip, and
-# prints the zip's path. Runs on macOS (codesign, ditto).
+# VERSION is year.month.day.hourminutesecond. Writes dist/LFG+ Helper.app and dist/lfgplus-helper-macos.dmg, and
+# prints the disk image's path. Runs on macOS (codesign, ditto, hdiutil).
 set -euo pipefail
 
 VERSION="$1"
@@ -13,9 +14,10 @@ BINARY="$2"
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 DIST="$ROOT/dist"
 APP="$DIST/LFG+ Helper.app"
-ZIP="$DIST/lfgplus-helper-macos.zip"
+DMG="$DIST/lfgplus-helper-macos.dmg"
+STAGE="$DIST/dmg"
 
-rm -rf "$APP" "$ZIP"
+rm -rf "$APP" "$DMG" "$STAGE"
 mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources"
 cp "$BINARY" "$APP/Contents/MacOS/lfgplus-helper"
 chmod 755 "$APP/Contents/MacOS/lfgplus-helper"
@@ -56,5 +58,23 @@ plutil -lint "$APP/Contents/Info.plist" >&2
 codesign --force --deep --sign - "$APP"
 codesign --verify --deep --strict "$APP" >&2
 
-(cd "$DIST" && ditto -c -k --keepParent "LFG+ Helper.app" "$(basename "$ZIP")")
-echo "$ZIP"
+# What the player sees when the image opens: the app and Applications, to drag it onto. ditto keeps the signature's
+# extended attributes, which a plain copy may drop.
+mkdir -p "$STAGE"
+ditto "$APP" "$STAGE/LFG+ Helper.app"
+ln -s /Applications "$STAGE/Applications"
+
+# HFS+ and zlib (UDZO) open on every macOS the app runs on. hdiutil sometimes finds the device busy on a fresh
+# machine, so it gets three tries.
+for try in 1 2 3; do
+    if hdiutil create -volname "LFG+ Helper" -srcfolder "$STAGE" -fs HFS+ -format UDZO -ov "$DMG" >&2; then
+        break
+    fi
+    if [ "$try" = 3 ]; then
+        exit 1
+    fi
+    sleep 5
+done
+hdiutil verify "$DMG" >&2
+rm -rf "$STAGE"
+echo "$DMG"
