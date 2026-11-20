@@ -18,7 +18,7 @@ use std::sync::mpsc::{self, RecvTimeoutError, Sender};
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 use lfgplus_helper::engine::{self, Engine, Status};
-use lfgplus_helper::icon::decode_tga;
+use lfgplus_helper::icon::{TRAY_ZOOM, decode_tga, zoomed};
 use lfgplus_helper::state::{self, State};
 use lfgplus_helper::upload::HttpUploader;
 use tao::event::{Event, StartCause};
@@ -223,7 +223,7 @@ struct Tray {
 
 fn build_tray(autostart_on: bool) -> Option<Tray> {
     let (rgba, w, h) = decode_tga(include_bytes!("../assets/icon.tga"))?;
-    let icon = Icon::from_rgba(rgba, w, h).ok()?;
+    let icon = Icon::from_rgba(zoomed(&rgba, w, h, TRAY_ZOOM), w, h).ok()?;
     let status = MenuItem::new("Starting…", false, None);
     let upload = MenuItem::new("Upload now", true, None);
     let choose = MenuItem::new("Choose WoW folder…", true, None);
