@@ -110,7 +110,10 @@ src/
   acks.rs           the LFGPlus_Helper add-on that tells LFG+ what went up
   state.rs          the helper's settings file
   icon.rs           reads the tray icon (an uncompressed TGA)
-assets/icon.tga     the LFG+ icon, the same one the addon shows
+assets/icon.tga     the tray icon: the LFG+ icon the addon shows, drawn a quarter larger
+assets/app.ico      the .exe's icon: the LFG+ wordmark from 48 px up, the bubble alone below that
+build.rs            puts app.ico, the name and the publisher into the Windows .exe
+tools/make-icon.py  draws app.ico (Pillow and Inter's variable font; the .ico is committed)
 tests/              the whole pass on a fake World of Warcraft folder, and uploads against a local server
 .github/workflows/  build.yml: format, lint, tests and builds on Windows, macOS and Linux; a release on every push to main
 ```
