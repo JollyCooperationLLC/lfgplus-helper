@@ -1,0 +1,40 @@
+[package]
+name = "lfgplus-helper"
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.89"
+description = "Uploads the endorsements the LFG+ addon holds to lfg.plus, from the tray."
+homepage = "https://lfg.plus"
+license-file = "LICENSE"
+publish = false
+
+[[bin]]
+name = "lfgplus-helper"
+path = "src/main.rs"
+
+[dependencies]
+# HTTPS without an async runtime.
+ureq = "3.5"
+# Config and state folders per system.
+dirs = "7"
+
+# The tray, its event loop, the folder picker and start-at-login. Kept out of the library so the logic builds and
+# tests without a desktop.
+tray-icon = "0.26"
+tao = "0.37"
+rfd = "0.18"
+auto-launch = "0.6"
+
+[target.'cfg(windows)'.dependencies]
+winreg = "0.56"
+
+[dev-dependencies]
+proptest = "1"
+tempfile = "3"
+
+[profile.release]
+opt-level = "s"
+lto = true
+codegen-units = 1
+strip = true
+panic = "abort"
