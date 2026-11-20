@@ -1,16 +1,21 @@
-"""Draws the helper's program icon, assets/app.ico, the one Windows shows for the .exe.
+"""Draws the helper's program icons: assets/app.ico, the one Windows shows for the .exe, and assets/app.icns, the
+macOS app's.
 
     python tools/make-icon.py FONT [--preview preview.png]
 
 FONT is Inter's variable font (any of its files with the weight axis: .ttf, .otf or .woff2), drawn at weight 800.
-Needs Pillow. Run it again only when the design changes; the .ico is committed.
+Needs Pillow. Run it again only when the design changes; both icons are committed.
 
 From 48 px up the icon is the LFG+ wordmark: "LFG" in white, and the speech bubble with its plus cut out standing in
 for the "+", raised against the G's shoulder, on a dark rounded tile so it reads on any background. Smaller than that
-"LFG" can't be read, so 16 to 40 px show the bubble alone, filling the square, as the tray does.
+"LFG" can't be read, so 16 to 40 px show the bubble alone, filling the square, as the tray does. On macOS the
+sizes are points (each also drawn at twice the pixels), the bubble stands alone at 16 and 32, and the tile keeps the
+margin every Mac app icon has around it.
 """
 
 import argparse
+import io
+import struct
 import sys
 
 from PIL import Image, ImageDraw, ImageFont
@@ -63,8 +68,8 @@ def bubble_icon(size):
     return master.resize((size, size), Image.LANCZOS)
 
 
-def wordmark_icon(font_path, size):
-    """LFG+ on a dark rounded tile."""
+def wordmark_icon(font_path, size, tile=1.0):
+    """LFG+ on a dark rounded tile, the tile filling `tile` of the square."""
     em = 400
     font = ImageFont.truetype(font_path, em)
     font.set_variation_by_axes([800])
@@ -89,18 +94,45 @@ def wordmark_icon(font_path, size):
     canvas.paste(Image.new("RGBA", (bubble, bubble), ACCENT), (round(bubble_x + ox), round(bubble_y + oy)), bubble_mask(bubble))
 
     master = Image.new("RGBA", (MASTER, MASTER), (0, 0, 0, 0))
-    ImageDraw.Draw(master).rounded_rectangle([0, 0, MASTER - 1, MASTER - 1], radius=MASTER * 0.2, fill=TILE)
-    inner = MASTER * 0.78  # the wordmark's width on the tile
+    side = MASTER * tile
+    edge = (MASTER - side) / 2
+    ImageDraw.Draw(master).rounded_rectangle([edge, edge, edge + side - 1, edge + side - 1], radius=side * 0.2, fill=TILE)
+    inner = side * 0.78  # the wordmark's width on the tile
     scale = inner / canvas.width
     mark = canvas.resize((round(canvas.width * scale), round(canvas.height * scale)), Image.LANCZOS)
     master.alpha_composite(mark, ((MASTER - mark.width) // 2, (MASTER - mark.height) // 2))
     return master.resize((size, size), Image.LANCZOS)
 
 
+# macOS: each icon slot, the pixels it holds, and whether the bubble (True) or the wordmark (False) fills it. Mac app
+# icons sit on a tile 824 of 1024 wide, the rest margin.
+ICNS = [
+    (b"icp4", 16, True), (b"ic11", 32, True), (b"icp5", 32, True), (b"ic12", 64, True),
+    (b"ic07", 128, False), (b"ic13", 256, False), (b"ic08", 256, False), (b"ic14", 512, False),
+    (b"ic09", 512, False), (b"ic10", 1024, False),
+]
+MAC_TILE = 824 / 1024
+
+
+def write_icns(path, font_path):
+    """An .icns file: a header, then each slot as its 4-letter type, its length and a PNG."""
+    chunks = []
+    for kind, pixels, bubble in ICNS:
+        image = bubble_icon(pixels) if bubble else wordmark_icon(font_path, pixels, MAC_TILE)
+        png = io.BytesIO()
+        image.save(png, format="PNG")
+        data = png.getvalue()
+        chunks.append(kind + struct.pack(">I", 8 + len(data)) + data)
+    body = b"".join(chunks)
+    with open(path, "wb") as f:
+        f.write(b"icns" + struct.pack(">I", 8 + len(body)) + body)
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("font")
     parser.add_argument("--out", default="assets/app.ico")
+    parser.add_argument("--mac-out", default="assets/app.icns")
     parser.add_argument("--preview")
     args = parser.parse_args()
 
@@ -108,6 +140,8 @@ def main():
     largest = images[-1]
     largest.save(args.out, format="ICO", sizes=[(i.width, i.height) for i in images], append_images=images[:-1])
     print(f"wrote {args.out}: {', '.join(str(i.width) for i in images)} px")
+    write_icns(args.mac_out, args.font)
+    print(f"wrote {args.mac_out}: {', '.join(str(p) for _, p, _ in ICNS)} px")
 
     if args.preview:
         # Every size at its real pixels, on a light and a dark background.

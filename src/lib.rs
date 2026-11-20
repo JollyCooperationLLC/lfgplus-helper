@@ -6,6 +6,7 @@ pub mod engine;
 pub mod icon;
 pub mod lua;
 pub mod saved;
+pub mod startup;
 pub mod state;
 pub mod upload;
 pub mod wow;

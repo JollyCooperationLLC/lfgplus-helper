@@ -19,6 +19,7 @@ use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 use lfgplus_helper::engine::{self, Engine, Status};
 use lfgplus_helper::icon::{TRAY_ZOOM, decode_tga, zoomed};
+use lfgplus_helper::startup;
 use lfgplus_helper::state::{self, State};
 use lfgplus_helper::upload::HttpUploader;
 use tao::event::{Event, StartCause};
@@ -221,13 +222,23 @@ struct Tray {
     quit: MenuItem,
 }
 
-fn build_tray(autostart_on: bool) -> Option<Tray> {
+/// Whether the app must be moved before it can start with the computer: on macOS, while it still runs from a temporary
+/// copy or a disk image.
+fn must_move() -> bool {
+    cfg!(target_os = "macos") && std::env::current_exe().is_ok_and(|exe| startup::must_move(&exe))
+}
+
+fn build_tray(autostart_on: bool, move_first: bool) -> Option<Tray> {
     let (rgba, w, h) = decode_tga(include_bytes!("../assets/icon.tga"))?;
     let icon = Icon::from_rgba(zoomed(&rgba, w, h, TRAY_ZOOM), w, h).ok()?;
     let status = MenuItem::new("Starting…", false, None);
     let upload = MenuItem::new("Upload now", true, None);
     let choose = MenuItem::new("Choose WoW folder…", true, None);
-    let start = CheckMenuItem::new("Start with my computer", true, autostart_on, None);
+    let start = if move_first {
+        CheckMenuItem::new("Move to Applications to start with your Mac", false, false, None)
+    } else {
+        CheckMenuItem::new("Start with my computer", true, autostart_on, None)
+    };
     let site = MenuItem::new("Open lfg.plus", true, None);
     let quit = MenuItem::new("Quit", true, None);
     let menu = Menu::new();
@@ -242,24 +253,39 @@ fn build_tray(autostart_on: bool) -> Option<Tray> {
         &quit,
     ])
     .ok()?;
-    let icon = TrayIconBuilder::new().with_menu(Box::new(menu)).with_tooltip(APP_NAME).with_icon(icon).build().ok()?;
+    let builder = TrayIconBuilder::new().with_menu(Box::new(menu)).with_tooltip(APP_NAME);
+    // The macOS menu bar draws icons from their shape alone, in its own colour, light or dark.
+    #[cfg(target_os = "macos")]
+    let builder = builder.with_icon_templated(icon);
+    #[cfg(not(target_os = "macos"))]
+    let builder = builder.with_icon(icon);
+    let icon = builder.build().ok()?;
     Some(Tray { _icon: icon, status, upload, choose, start, site, quit })
 }
 
 fn run_tray(o: Options) {
-    let event_loop = EventLoopBuilder::<UserEvent>::with_user_event().build();
+    #[allow(unused_mut)]
+    let mut event_loop = EventLoopBuilder::<UserEvent>::with_user_event().build();
+    // A menu-bar app on macOS: no Dock icon and no app menu.
+    #[cfg(target_os = "macos")]
+    {
+        use tao::platform::macos::{ActivationPolicy, EventLoopExtMacOS};
+        event_loop.set_activation_policy(ActivationPolicy::Accessory);
+    }
     let proxy = event_loop.create_proxy();
     let menu_proxy = event_loop.create_proxy();
     MenuEvent::set_event_handler(Some(move |e| {
         let _ = menu_proxy.send_event(UserEvent::Menu(e));
     }));
 
-    // The first run starts with the computer; after that the player's choice stands.
+    // The first run starts with the computer; after that the player's choice stands. An app that must be moved first
+    // registers nothing and decides nothing until it has been.
     let saved = State::load(&o.state);
     let wanted = saved.autostart.unwrap_or(true);
-    let autostart_on = apply_autostart(wanted);
+    let move_first = must_move();
+    let autostart_on = !move_first && apply_autostart(wanted);
     let worker = spawn_worker(&o, proxy);
-    if saved.autostart.is_none() {
+    if saved.autostart.is_none() && !move_first {
         let _ = worker.send(Command::Autostart(wanted));
     }
 
@@ -269,7 +295,7 @@ fn run_tray(o: Options) {
         match event {
             // The tray is made once the loop runs, as macOS requires.
             Event::NewEvents(StartCause::Init) => {
-                tray = build_tray(autostart_on);
+                tray = build_tray(autostart_on, move_first);
                 if tray.is_none() {
                     *control_flow = ControlFlow::Exit;
                 }

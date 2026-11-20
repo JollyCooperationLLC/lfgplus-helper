@@ -37,8 +37,11 @@ A few things to know:
 1. **Set up LFG+.** Install the addon and link your account with your setup code (see the addon's
    [Getting started](https://github.com/JollyCooperationLLC/lfgplus-addon#getting-started)).
 2. **Get the helper** from the [Releases](https://github.com/JollyCooperationLLC/lfgplus-helper/releases) page:
-   `lfgplus-helper-windows.exe`, `lfgplus-helper-macos` or `lfgplus-helper-linux`. On macOS and Linux, make it
-   runnable first with `chmod +x`. You can also build it yourself (see Development).
+   - Windows: `lfgplus-helper-windows.exe`.
+   - macOS: `lfgplus-helper-macos.zip`. Open it and drag **LFG+ Helper** into your Applications folder.
+   - Linux: `lfgplus-helper-linux`. Make it runnable with `chmod +x lfgplus-helper-linux`.
+
+   You can also build it yourself (see Development).
 3. **Run it.** It finds World of Warcraft where the Battle.net app installed it, or in the usual folders. If it can't,
    choose **Choose WoW folder…** in its menu. It starts with your computer from then on.
 4. **Play as usual.** After you log out or `/reload`, your endorsements go up on their own. LFG+'s Endorsements tab
@@ -46,6 +49,19 @@ A few things to know:
 
 The first time you log in after installing it, the game may list **LFG+ Helper** as a new add-on. Leave it on: it's
 how LFG+ learns what the helper uploaded.
+
+### Opening it on a Mac
+
+The Mac app isn't notarized by Apple, so the first time you open it macOS stops it with "Apple could not verify
+'LFG+ Helper' is free of malware". To open it anyway:
+
+1. Open **LFG+ Helper** from Applications once, and close the warning.
+2. Open **System Settings → Privacy & Security**, scroll down to the line about LFG+ Helper, and click **Open Anyway**.
+3. Confirm with your password or Touch ID.
+
+From then on it opens normally and lives in the menu bar, with no Dock icon. Run it from Applications, not from the
+zip or your Downloads folder: macOS runs apps it hasn't checked from a temporary copy, so the menu shows **Move to
+Applications to start with your Mac** until you do.
 
 ## Menu
 
@@ -109,11 +125,14 @@ src/
   upload.rs         POST /api/v1/uploads
   acks.rs           the LFGPlus_Helper add-on that tells LFG+ what went up
   state.rs          the helper's settings file
+  startup.rs        on macOS, whether the app must be moved to Applications before it starts with the computer
   icon.rs           reads the tray icon (an uncompressed TGA)
 assets/icon.tga     the tray icon: the LFG+ icon the addon shows, drawn a quarter larger
 assets/app.ico      the .exe's icon: the LFG+ wordmark from 48 px up, the bubble alone below that
+assets/app.icns     the Mac app's icon: the same drawing, sized for macOS
 build.rs            puts app.ico, the name and the publisher into the Windows .exe
-tools/make-icon.py  draws app.ico (Pillow and Inter's variable font; the .ico is committed)
+tools/make-icon.py  draws app.ico and app.icns (Pillow and Inter's variable font; both are committed)
+tools/package-macos.sh  builds LFG+ Helper.app around a macOS build, signs it ad hoc and zips it
 tests/              the whole pass on a fake World of Warcraft folder, and uploads against a local server
 .github/workflows/  build.yml: format, lint, tests and builds on Windows, macOS and Linux; a release on every push to main
 ```
@@ -143,8 +162,9 @@ GNOME shows tray icons only with the AppIndicator extension, which most distribu
 
 Every push runs `.github/workflows/build.yml` on Windows, macOS and Linux: format, lint, tests and a release build.
 When all three pass on `main`, the builds are published on the
-[Releases](https://github.com/JollyCooperationLLC/lfgplus-helper/releases) page. The version is the UTC time of the
-release, `year.month.day.hourminutesecond` (for example `2026.11.20.083242`). To build one locally:
+[Releases](https://github.com/JollyCooperationLLC/lfgplus-helper/releases) page. The version is the commit's UTC
+time, `year.month.day.hourminutesecond` (for example `2026.11.20.083242`). The Mac app is one program for Apple
+Silicon and Intel, signed ad hoc (no Apple account), so macOS asks once before opening it. To build one locally:
 
 ```bash
 cargo build --release   # target/release/lfgplus-helper(.exe)
