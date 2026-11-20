@@ -1,86 +1,158 @@
 # LFG+ Helper
 
-A small app that sits in your tray and uploads the endorsements the [LFG+](https://lfg.plus) addon holds, so you
-never have to copy them out of the game and paste them on lfg.plus/upload.
+Uploads your [LFG+](https://lfg.plus) endorsements for you. It's a small app in your tray, so you never copy records
+out of the game and paste them on lfg.plus/upload again.
 
-It runs on Windows (notification area), macOS (menu bar) and Linux (tray or AppIndicator).
+## Overview
 
-## What it does
-
-1. **Finds World of Warcraft.** It looks where the Battle.net app installed it, then in the usual folders. You can
-   pick the folder yourself from the tray menu.
-2. **Watches the addon's saved data.** The game writes it to
-   `WTF/Account/<ACCOUNT>/SavedVariables/LFGPlus.lua` when you log out or type `/reload`. The helper checks once a
-   minute whether that file changed, for every game version and every account it finds.
-3. **Uploads what's waiting.** These are the same lines the addon's upload box would give you: endorsements you gave
-   and received, and copies you carry for your groups. Lines already uploaded, or too old for the site, are left out.
-4. **Tells the addon what went up.** It writes a tiny add-on of its own, `LFGPlus_Helper`, next to LFG+ in
-   `Interface/AddOns`. The game never writes there, so nothing gets overwritten. The next time you log in or
-   `/reload`, LFG+ marks those endorsements as uploaded, just as if you had pressed "I uploaded these".
-
-The tray menu shows where things stand ("Sent 12 endorsements 5 minutes ago"). It also has **Upload now**,
-**Choose WoW folder…**, **Start with my computer**, **Open lfg.plus** and **Quit**.
-
-## What it never does
-
-- It never sends anything but the upload lines. The saved data also holds your setup code; the helper reads past it
-  and never keeps, logs or sends it.
-- It never writes to the game's own saved data.
-- It doesn't log you in or need an account, and sends no cookies. It uses the same upload endpoint as
-  lfg.plus/upload.
-- It can't tell one endorsement from another. It sends every waiting line exactly as the addon printed it, and only
-  ever counts how many it sent.
-
-## Running it
+The helper sits in the notification area on Windows, the menu bar on macOS, or the tray on Linux. Click its icon and
+the first line says where things stand:
 
 ```
-lfgplus-helper                   run in the tray
-lfgplus-helper --once            look once, upload what's waiting, print where things stand, exit
-lfgplus-helper --list            print the folders it searches and the saved data it finds, exit
-
---wow PATH       use this World of Warcraft folder
---api URL        where lfg.plus answers (default https://lfg.plus, or the LFGPLUS_API environment variable)
---state FILE     the helper's own settings file
---interval S     seconds between looks at the saved data (default 60)
+Sent 12 endorsements 5 minutes ago
 ```
 
-The helper keeps its settings and a short log in `%APPDATA%\LFGPlusHelper` (Windows),
-`~/Library/Application Support/LFGPlusHelper` (macOS) or `~/.config/LFGPlusHelper` (Linux). The log holds counts
-and file paths only.
+Whenever you log out of World of Warcraft or type `/reload`, the game saves what LFG+ holds. Within a minute the
+helper uploads everything still waiting: the endorsements you gave and received, and the copies you carry for others
+in your groups. The next time you log in, LFG+ shows them as uploaded, just as if you had pressed
+**I uploaded these** yourself.
 
-The first run turns on **Start with my computer**. Untick it in the menu and that choice sticks.
+A few things to know:
 
-## Building
+- **Nothing to log in to.** The helper uses the same upload as lfg.plus/upload, which needs no account.
+- **It never touches the game's saved data.** It only reads it. To tell LFG+ what went up, it keeps a tiny add-on of
+  its own, **LFG+ Helper** (`LFGPlus_Helper`), next to LFG+ in `Interface/AddOns`. The game only ever reads that one,
+  so nothing gets overwritten.
+- **Your setup code stays put.** It's in the same saved data. The helper reads past it and never keeps, logs or
+  sends it.
+- **Every endorsement goes up the same way.** The helper sends each waiting line exactly as LFG+ wrote it, and can't
+  tell one from another.
+- **It catches up on its own.** If lfg.plus can't be reached, it tries again a minute later, then less often, up to
+  every half hour.
+- **Every game version and account.** It finds each game version installed (Retail, Classic, WoW Forever…) and every
+  account in each.
+
+## Getting started
+
+1. **Set up LFG+.** Install the addon and link your account with your setup code (see the addon's
+   [Getting started](https://github.com/JollyCooperationLLC/lfgplus-addon#getting-started)).
+2. **Get the helper** for Windows, macOS or Linux from the
+   [Releases](https://github.com/JollyCooperationLLC/lfgplus-helper/releases) page, or build it yourself (see
+   Development).
+3. **Run it.** It finds World of Warcraft where the Battle.net app installed it, or in the usual folders. If it can't,
+   choose **Choose WoW folder…** in its menu. It starts with your computer from then on.
+4. **Play as usual.** After you log out or `/reload`, your endorsements go up on their own. LFG+'s Endorsements tab
+   then lists only what you've given or received since.
+
+The first time you log in after installing it, the game may list **LFG+ Helper** as a new add-on. Leave it on: it's
+how LFG+ learns what the helper uploaded.
+
+## Menu
+
+| Item | What it does |
+|---|---|
+| *(the first line)* | Where things stand: what was sent and when, or what's wrong ("Can't reach lfg.plus. Trying again soon.") |
+| **Upload now** | Look at the saved data right away and upload anything waiting |
+| **Choose WoW folder…** | Pick your World of Warcraft folder, if the helper didn't find it |
+| **Start with my computer** | On from the first run; untick it and that choice sticks |
+| **Open lfg.plus** | Open the site in your browser |
+| **Quit** | Close the helper until you start it again |
+
+## Command line
+
+| Option | What it does |
+|---|---|
+| `--once` | Look once, upload what's waiting, print where things stand, then exit (no tray icon) |
+| `--list` | Print the folders it searches and the saved data it finds, then exit |
+| `--wow PATH` | Use this World of Warcraft folder |
+| `--interval SECONDS` | How often to look at the saved data (default 60) |
+| `--state FILE` | Use this settings file instead of the usual one |
+| `--api URL` | Where lfg.plus answers (default `https://lfg.plus`, or the `LFGPLUS_API` environment variable) |
+
+## Configuring
+
+There's nothing to set up beyond the menu. The helper keeps its settings and a short log in:
+
+- Windows: `%APPDATA%\LFGPlusHelper`
+- macOS: `~/Library/Application Support/LFGPlusHelper`
+- Linux: `~/.config/LFGPlusHelper`
+
+The settings file (`state.txt`) is plain text: the folder you chose, whether it starts with your computer, and how far
+each account's endorsements were uploaded. The log (`helper.log`) holds counts and file paths only.
+
+## Privacy
+
+The helper reads each account's `WTF/Account/<ACCOUNT>/SavedVariables/LFGPlus.lua` and sends lfg.plus nothing but
+the upload lines in it. It sends no cookies and no account details. Endorsed characters are public on lfg.plus until
+their owner hides them, as with uploads you paste yourself.
+
+## Support
+
+Questions or bugs? Write to [support@lfg.plus](mailto:support@lfg.plus). Short answers are in the
+[FAQ](https://lfg.plus/faq).
+
+## Development
+
+The helper is written in Rust. It reads SavedVariables with its own small parser (no Lua runs), uploads with `ureq`,
+and draws the tray with `tray-icon`. This repository is checked out as the `helper/` submodule of the lfg.plus
+repository.
+
+### Layout
+
+```
+src/
+  main.rs           the tray icon and menu, command-line options, one helper at a time
+  engine.rs         one pass: find the saved data, upload what waits, remember it, tell LFG+; retries
+  wow.rs            finds World of Warcraft, its game folders and every account's saved data
+  saved.rs          the upload lines and their numbers in LFG+'s saved data, and which still wait
+  lua.rs            reads and writes the part of Lua that SavedVariables files use (pure)
+  upload.rs         POST /api/v1/uploads
+  acks.rs           the LFGPlus_Helper add-on that tells LFG+ what went up
+  state.rs          the helper's settings file
+  icon.rs           reads the tray icon (an uncompressed TGA)
+assets/icon.tga     the LFG+ icon, the same one the addon shows
+tests/              the whole pass on a fake World of Warcraft folder, and uploads against a local server
+.github/workflows/  build.yml: format, lint, tests and a release build on Windows, macOS and Linux
+```
+
+### Tests
 
 You need [Rust](https://rustup.rs) 1.89 or newer.
 
-```
-cargo build --release
+```bash
 cargo test
 cargo clippy --all-targets -- -D warnings
+cargo fmt --check
+cargo llvm-cov --summary-only --ignore-filename-regex 'main\.rs'   # line coverage, with cargo-llvm-cov
 ```
+
+The SavedVariables parser also has property tests (fuzzed input never panics, strings and numbers round-trip).
 
 On Linux the tray needs GTK 3 and an AppIndicator library to build and run. On Debian and Ubuntu:
 
-```
+```bash
 sudo apt install libgtk-3-dev libxdo-dev libayatana-appindicator3-dev
 ```
 
 GNOME shows tray icons only with the AppIndicator extension, which most distributions include.
 
-## How it's put together
+### Releases
 
-| File | What it does |
-|---|---|
-| `src/lua.rs` | Reads and writes the small part of Lua that SavedVariables files use. No Lua runs. |
-| `src/saved.rs` | Takes the upload lines and their numbers from the addon's saved data. |
-| `src/wow.rs` | Finds World of Warcraft, its game folders and every account's saved data. |
-| `src/upload.rs` | Sends lines to lfg.plus's upload endpoint. |
-| `src/acks.rs` | Writes the `LFGPlus_Helper` add-on that tells LFG+ what went up. |
-| `src/state.rs` | The helper's own settings file. |
-| `src/engine.rs` | One pass: find, send, remember, tell the addon. |
-| `src/main.rs` | The tray icon and menu. |
+Every push runs `.github/workflows/build.yml` on Windows, macOS and Linux and keeps each system's release build as a
+download on the run. To build one locally:
+
+```bash
+cargo build --release   # target/release/lfgplus-helper(.exe)
+```
+
+### Development and testing methodology
+
+- `main.rs` stays thin: the tray only shows what the engine reports and passes clicks back. Everything else is plain
+  functions over files and values, so tests can call them.
+- Never write the game's own saved data. Anything LFG+ needs to know goes in the helper's add-on, written beside its
+  place and renamed over it.
+- Read the saved data as untrusted: limit nesting, refuse anything that isn't SavedVariables, and fuzz the parser.
 
 ## License
 
-All rights reserved, Jolly Cooperation LLC. See [LICENSE](LICENSE).
+All rights reserved - Jolly Cooperation LLC.
