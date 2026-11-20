@@ -1,8 +1,15 @@
+# Every push and pull request: format, lint, tests and a release build on Windows, macOS and Linux. Every push to main
+# then publishes the three builds as a GitHub release, versioned by UTC time (year.month.day.hourminutesecond). Actions
+# are pinned to a full commit SHA, as the organisation requires; the comment names the release.
 name: build
 
 on:
   push:
   pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
 
 jobs:
   test:
@@ -30,3 +37,36 @@ jobs:
             target/release/lfgplus-helper
             target/release/lfgplus-helper.exe
           if-no-files-found: error
+
+  release:
+    name: Publish
+    needs: test
+    if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    # One release at a time, in the order the pushes came.
+    concurrency:
+      group: release
+      cancel-in-progress: false
+    steps:
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          path: built
+      - name: Name the files
+        run: |
+          mkdir dist
+          mv built/lfgplus-helper-Windows/lfgplus-helper.exe dist/lfgplus-helper-windows.exe
+          mv built/lfgplus-helper-macOS/lfgplus-helper dist/lfgplus-helper-macos
+          mv built/lfgplus-helper-Linux/lfgplus-helper dist/lfgplus-helper-linux
+          ls -l dist
+      - name: Publish the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          VERSION="$(date -u +%Y.%m.%d.%H%M%S)"
+          gh release create "v$VERSION" dist/* \
+            --repo "$GITHUB_REPOSITORY" \
+            --target "$GITHUB_SHA" \
+            --title "LFG+ Helper $VERSION" \
+            --generate-notes

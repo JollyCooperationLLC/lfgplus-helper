@@ -36,9 +36,9 @@ A few things to know:
 
 1. **Set up LFG+.** Install the addon and link your account with your setup code (see the addon's
    [Getting started](https://github.com/JollyCooperationLLC/lfgplus-addon#getting-started)).
-2. **Get the helper** for Windows, macOS or Linux from the
-   [Releases](https://github.com/JollyCooperationLLC/lfgplus-helper/releases) page, or build it yourself (see
-   Development).
+2. **Get the helper** from the [Releases](https://github.com/JollyCooperationLLC/lfgplus-helper/releases) page:
+   `lfgplus-helper-windows.exe`, `lfgplus-helper-macos` or `lfgplus-helper-linux`. On macOS and Linux, make it
+   runnable first with `chmod +x`. You can also build it yourself (see Development).
 3. **Run it.** It finds World of Warcraft where the Battle.net app installed it, or in the usual folders. If it can't,
    choose **Choose WoW folder…** in its menu. It starts with your computer from then on.
 4. **Play as usual.** After you log out or `/reload`, your endorsements go up on their own. LFG+'s Endorsements tab
@@ -112,7 +112,7 @@ src/
   icon.rs           reads the tray icon (an uncompressed TGA)
 assets/icon.tga     the LFG+ icon, the same one the addon shows
 tests/              the whole pass on a fake World of Warcraft folder, and uploads against a local server
-.github/workflows/  build.yml: format, lint, tests and a release build on Windows, macOS and Linux
+.github/workflows/  build.yml: format, lint, tests and builds on Windows, macOS and Linux; a release on every push to main
 ```
 
 ### Tests
@@ -138,8 +138,10 @@ GNOME shows tray icons only with the AppIndicator extension, which most distribu
 
 ### Releases
 
-Every push runs `.github/workflows/build.yml` on Windows, macOS and Linux and keeps each system's release build as a
-download on the run. To build one locally:
+Every push runs `.github/workflows/build.yml` on Windows, macOS and Linux: format, lint, tests and a release build.
+When all three pass on `main`, the builds are published on the
+[Releases](https://github.com/JollyCooperationLLC/lfgplus-helper/releases) page. The version is the UTC time of the
+release, `year.month.day.hourminutesecond` (for example `2026.11.20.083242`). To build one locally:
 
 ```bash
 cargo build --release   # target/release/lfgplus-helper(.exe)
