@@ -28,7 +28,8 @@ A few things to know:
 - **Every endorsement goes up the same way.** The helper sends each waiting line exactly as LFG+ wrote it, and can't
   tell one from another.
 - **It catches up on its own.** If lfg.plus can't be reached, it tries again a minute later, then less often, up to
-  every half hour.
+  every half hour. If lfg.plus turns down one account's upload, the others still go up, and that one is tried again
+  after you next play.
 - **Every game version and account.** It finds each game version installed (Retail, Classic, WoW Forever…) and every
   account in each.
 
@@ -39,16 +40,26 @@ A few things to know:
 2. **Get the helper** from the [Releases](https://github.com/JollyCooperationLLC/lfgplus-helper/releases) page:
    - Windows: `lfgplus-helper-windows.exe`.
    - macOS: `lfgplus-helper-macos.dmg`. Open it and drag **LFG+ Helper** onto the Applications folder beside it.
-   - Linux: `lfgplus-helper-linux`. Make it runnable with `chmod +x lfgplus-helper-linux`.
+   - Linux: `lfgplus-helper-linux`. Make it runnable with `chmod +x lfgplus-helper-linux`. It needs GTK 3 and an
+     AppIndicator library, which most desktops have. If it doesn't start, on Debian and Ubuntu run
+     `sudo apt install libgtk-3-0 libxdo3 libayatana-appindicator3-1`. GNOME shows tray icons only with the
+     AppIndicator extension.
 
    You can also build it yourself (see Development).
-3. **Run it.** It finds World of Warcraft where the Battle.net app installed it, or in the usual folders. If it can't,
-   choose **Choose WoW folder…** in its menu. It starts with your computer from then on.
+3. **Run it.** A window says it's running and where its icon is. On Windows and Linux it copies itself to your own
+   programs folder and runs from there, so you can delete the file you downloaded. It finds World of Warcraft where
+   the Battle.net app installed it, or in the usual folders. If it can't, choose **Choose WoW folder…** in its menu.
+   It starts with your computer from then on.
 4. **Play as usual.** After you log out or `/reload`, your endorsements go up on their own. LFG+'s Endorsements tab
    then lists only what you've given or received since.
 
 The first time you log in after installing it, the game may list **LFG+ Helper** as a new add-on. Leave it on: it's
 how LFG+ learns what the helper uploaded.
+
+### Opening it on Windows
+
+The helper isn't signed with a code-signing certificate, so the first time you open it Windows may say "Windows
+protected your PC". Click **More info**, then **Run anyway**. Windows asks only once.
 
 ### Opening it on a Mac
 
@@ -64,6 +75,20 @@ disk image or your Downloads folder: the app can't start with your Mac from ther
 Applications to start with your Mac** until you do. Once it's in Applications, you can eject the disk image and
 delete it.
 
+### Updating
+
+The helper looks once a day for a newer release. When there is one, the version line at the bottom of its menu turns
+into **Get the new version…** and opens the download. On Windows and Linux, open the new download: if the old helper is
+still running it tells you to choose **Quit** in its menu first, then open the download again. It replaces the old
+copy. On a Mac, quit the helper and drag the new app over the old one in Applications.
+
+### Uninstalling
+
+Untick **Start with my computer**, choose **Quit**, then delete the program: on Windows
+`%LOCALAPPDATA%\Programs\LFG+ Helper`, on Linux `~/.local/bin/lfgplus-helper`, on a Mac **LFG+ Helper** in
+Applications. Its settings are in the folder under Configuring. In each game folder, `Interface/AddOns/LFGPlus_Helper`
+can go too.
+
 ## Menu
 
 | Item | What it does |
@@ -71,8 +96,11 @@ delete it.
 | *(the first line)* | Where things stand: what was sent and when, or what's wrong ("Can't reach lfg.plus. Trying again soon.") |
 | **Upload now** | Look at the saved data right away and upload anything waiting |
 | **Choose WoW folder…** | Pick your World of Warcraft folder, if the helper didn't find it |
+| **Find WoW on its own** | Forget the folder you chose and look in the usual places again |
 | **Start with my computer** | On from the first run; untick it and that choice sticks |
 | **Open lfg.plus** | Open the site in your browser |
+| **Open log** | Open the helper's log: what it sent and what went wrong, in counts and file paths |
+| *(the version)* | Which version this is; **Get the new version…** when there's a newer one |
 | **Quit** | Close the helper until you start it again |
 
 ## Command line
@@ -85,6 +113,9 @@ delete it.
 | `--interval SECONDS` | How often to look at the saved data (default 60) |
 | `--state FILE` | Use this settings file instead of the usual one |
 | `--api URL` | Where lfg.plus answers (default `https://lfg.plus`, or the `LFGPLUS_API` environment variable) |
+| `--version` | Print the version, then exit |
+
+Started with any option, the helper doesn't copy itself to your programs folder.
 
 ## Configuring
 
@@ -94,14 +125,19 @@ There's nothing to set up beyond the menu. The helper keeps its settings and a s
 - macOS: `~/Library/Application Support/LFGPlusHelper`
 - Linux: `~/.config/LFGPlusHelper`
 
-The settings file (`state.txt`) is plain text: the folder you chose, whether it starts with your computer, and how far
-each account's endorsements were uploaded. The log (`helper.log`) holds counts and file paths only.
+The settings file (`state.txt`) is plain text: the folder you chose, whether it starts with your computer, whether it
+has shown its first window, and how far each account's endorsements were uploaded. The log (`helper.log`) holds counts
+and file paths only. `helper.lock` and `running.txt` keep a second helper from starting and tell it which version is
+running.
 
 ## Privacy
 
 The helper reads each account's `WTF/Account/<ACCOUNT>/SavedVariables/LFGPlus.lua` and sends lfg.plus nothing but
 the upload lines in it. It sends no cookies and no account details. Endorsed characters are public on lfg.plus until
 their owner hides them, as with uploads you paste yourself.
+
+Once a day it asks the [Releases](https://github.com/JollyCooperationLLC/lfgplus-helper/releases) page which version
+is the latest. That request carries nothing but the helper's version in its User-Agent.
 
 ## Support
 
@@ -118,7 +154,12 @@ repository.
 
 ```
 src/
-  main.rs           the tray icon and menu, command-line options, one helper at a time
+  main.rs           the tray icon, its menu and windows, start-at-login; passes everything else to the modules below
+  cli.rs            command-line options
+  instance.rs       one helper at a time, the running version, and the log
+  install.rs        on Windows and Linux, copies itself to the user's programs folder
+  update.rs         whether a newer release is out
+  notice.rs         what the first-start and already-running windows say
   engine.rs         one pass: find the saved data, upload what waits, remember it, tell LFG+; retries
   wow.rs            finds World of Warcraft, its game folders and every account's saved data
   saved.rs          the upload lines and their numbers in LFG+'s saved data, and which still wait
@@ -131,10 +172,12 @@ src/
 assets/icon.tga     the tray icon: the LFG+ icon the addon shows, drawn a quarter larger
 assets/app.ico      the .exe's icon: the LFG+ wordmark from 48 px up, the bubble alone below that
 assets/app.icns     the Mac app's icon: the same drawing, sized for macOS
-build.rs            puts app.ico, the name and the publisher into the Windows .exe
+build.rs            sets the version, and puts app.ico, the name and the publisher into the Windows .exe
 tools/make-icon.py  draws app.ico and app.icns (Pillow and Inter's variable font; both are committed)
 tools/package-macos.sh  builds LFG+ Helper.app around a macOS build, signs it ad hoc and puts it in a disk image
-tests/              the whole pass on a fake World of Warcraft folder, and uploads against a local server
+tests/              the whole pass on a fake World of Warcraft folder, and uploads and the update check against a
+                    local server
+tests/vectors/      Acks.lua, the helper's acks file for known acks; tests/lua/check-acks.lua loads it in Lua 5.1
 .github/workflows/  build.yml: format, lint, tests and builds on Windows, macOS and Linux; a release on every push to main
 ```
 
@@ -147,9 +190,11 @@ cargo test
 cargo clippy --all-targets -- -D warnings
 cargo fmt --check
 cargo llvm-cov --summary-only --ignore-filename-regex 'main\.rs'   # line coverage, with cargo-llvm-cov
+lua5.1 tests/lua/check-acks.lua tests/vectors/Acks.lua             # the acks file loads as the game loads it
 ```
 
-The SavedVariables parser also has property tests (fuzzed input never panics, strings and numbers round-trip).
+The SavedVariables parser also has property tests (fuzzed input never panics, strings and numbers round-trip). CI
+also starts every build once (`--version`, `--list`), and opens the Mac disk image to check the app inside.
 
 On Linux the tray needs GTK 3 and an AppIndicator library to build and run. On Debian and Ubuntu:
 
@@ -164,12 +209,15 @@ GNOME shows tray icons only with the AppIndicator extension, which most distribu
 Every push runs `.github/workflows/build.yml` on Windows, macOS and Linux: format, lint, tests and a release build.
 When all three pass on `main`, the builds are published on the
 [Releases](https://github.com/JollyCooperationLLC/lfgplus-helper/releases) page. The version is the commit's UTC
-time, `year.month.day.hourminutesecond` (for example `2026.11.20.083242`). The Mac app is one program for Apple
-Silicon and Intel, signed ad hoc (no Apple account), so macOS asks once before opening it. To build one locally:
+time, `year.month.day.hourminutesecond` (for example `2026.11.20.083242`), built into the program from
+`LFGPLUS_HELPER_VERSION`. The Mac app is one program for Apple Silicon and Intel, signed ad hoc (no Apple account), so
+macOS asks once before opening it. To build one locally:
 
 ```bash
 cargo build --release   # target/release/lfgplus-helper(.exe)
 ```
+
+A build without `LFGPLUS_HELPER_VERSION` is a development build: it never copies itself or looks for updates.
 
 ### Development and testing methodology
 

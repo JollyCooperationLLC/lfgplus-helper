@@ -1,5 +1,6 @@
 //! What the helper remembers between runs, in one small text file in the system's config folder: the WoW folder the
-//! player chose, whether it starts with the computer, how far each install's lines were sent, and the last upload.
+//! player chose, whether it starts with the computer, whether it has said hello, how far each install's lines were
+//! sent, and the last upload.
 //! One `name<TAB>value…` line each, so it's easy to read and to repair by hand.
 
 use std::collections::BTreeMap;
@@ -13,6 +14,8 @@ pub struct State {
     pub wow: Option<PathBuf>,
     /// Start with the computer. None until the player (or the first run) decides.
     pub autostart: Option<bool>,
+    /// The first-start window was shown.
+    pub welcomed: bool,
     /// Per install (or per file, for addons without an install id): every line numbered up to this was delivered.
     pub sent: BTreeMap<String, u64>,
     /// The last delivery: when (Unix seconds) and how many lines.
@@ -27,6 +30,7 @@ impl State {
             match fields.as_slice() {
                 ["wow", path] if !path.is_empty() => state.wow = Some(PathBuf::from(path)),
                 ["autostart", on] => state.autostart = Some(*on == "1"),
+                ["welcomed", on] => state.welcomed = *on == "1",
                 ["sent", key, seq] => {
                     if let Ok(seq) = seq.parse() {
                         state.sent.insert((*key).to_owned(), seq);
@@ -50,6 +54,9 @@ impl State {
         }
         if let Some(on) = self.autostart {
             out.push_str(&format!("autostart\t{}\n", u8::from(on)));
+        }
+        if self.welcomed {
+            out.push_str("welcomed\t1\n");
         }
         for (key, seq) in &self.sent {
             out.push_str(&format!("sent\t{key}\t{seq}\n"));
@@ -87,6 +94,7 @@ mod tests {
         let mut state = State {
             wow: Some(PathBuf::from("C:\\Games\\World of Warcraft")),
             autostart: Some(false),
+            welcomed: true,
             ..State::default()
         };
         state.sent.insert("a1b2c3d4e5f60718".into(), 812);
@@ -98,7 +106,8 @@ mod tests {
 
     #[test]
     fn ignores_lines_it_cant_read() {
-        let state = State::parse("wow\t\nautostart\t1\nsent\tk\tx\nlast\t1\nlast\tx\t1\njunk\nsent\tk\t4\n");
+        let state =
+            State::parse("wow\t\nautostart\t1\nwelcomed\t0\nsent\tk\tx\nlast\t1\nlast\tx\t1\njunk\nsent\tk\t4\n");
         assert_eq!(state, State { autostart: Some(true), sent: [("k".to_string(), 4)].into(), ..State::default() });
     }
 

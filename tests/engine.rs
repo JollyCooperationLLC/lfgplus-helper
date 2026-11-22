@@ -17,12 +17,19 @@ const INSTALL: &str = "a1b2c3d4e5f60718";
 struct Fake {
     sent: Arc<Mutex<Vec<Vec<String>>>>,
     fail: Arc<Mutex<Option<UploadError>>>,
+    /// Refuses (400) any upload holding this line.
+    refuse: Arc<Mutex<Option<String>>>,
 }
 
 impl Uploader for Fake {
     fn upload(&mut self, lines: &[String]) -> Result<(), UploadError> {
         if let Some(e) = self.fail.lock().expect("lock").clone() {
             return Err(e);
+        }
+        if let Some(bad) = self.refuse.lock().expect("lock").as_ref()
+            && lines.contains(bad)
+        {
+            return Err(UploadError::Refused(400));
         }
         self.sent.lock().expect("lock").push(lines.to_vec());
         Ok(())
@@ -35,6 +42,9 @@ impl Fake {
     }
     fn fail_with(&self, e: Option<UploadError>) {
         *self.fail.lock().expect("lock") = e;
+    }
+    fn refuse(&self, line: Option<String>) {
+        *self.refuse.lock().expect("lock") = line;
     }
 }
 
@@ -292,7 +302,7 @@ fn says_what_it_cant_find() {
     let fake = Fake::default();
     let mut engine = Engine::new(fake.clone(), dir.path().join("state.txt"));
     engine.choose_wow(dir.path().join("nowhere"));
-    assert_eq!(engine.tick(NOW, false), Status::NoWow);
+    assert_eq!(engine.tick(NOW, false), Status::NotInFolder);
     assert_eq!(engine.roots(), [dir.path().join("nowhere")]);
     let game = dir.path().join("wow").join("_retail_").join("WTF");
     fs::create_dir_all(&game).expect("mkdir");
@@ -305,4 +315,51 @@ fn searches_the_usual_places_until_a_folder_is_chosen() {
     let dir = tempfile::tempdir().expect("temp dir");
     let engine = Engine::new(Fake::default(), dir.path().join("state.txt"));
     assert_eq!(engine.roots(), lfgplus_helper::wow::usual_roots());
+}
+
+#[test]
+fn a_refused_upload_holds_up_no_other_account() {
+    let world = World::new();
+    world.write("ONE", Some(INSTALL), None, &[(1, NOW)], &[]);
+    world.write("TWO", Some("ffffffff00000000"), None, &[(2, NOW)], &[]);
+    let fake = Fake::default();
+    fake.refuse(Some(record(1)));
+    let mut engine = world.engine(&fake);
+
+    assert_eq!(engine.tick(NOW, false), Status::Refused(400));
+    assert_eq!(fake.uploads(), [texts(&[2])], "the other account went up");
+    assert_eq!(world.acks().get("ffffffff00000000"), Some(&2));
+    assert_eq!(world.acks().get(INSTALL), None, "nothing acked for the refused one");
+    assert!(engine.journal.iter().any(|l| l.starts_with("lfg.plus refused an upload")));
+
+    // Not tried again on its own while nothing changed, and the menu keeps saying so.
+    assert_eq!(engine.tick(NOW + 60, false), Status::Refused(400));
+    assert!(fake.uploads().is_empty());
+
+    // The player asks, and this time it goes.
+    fake.refuse(None);
+    assert_eq!(engine.tick(NOW + 120, true), Status::Ready(Some((NOW + 120, 1))));
+    assert_eq!(fake.uploads(), [texts(&[1])]);
+    assert_eq!(world.acks().get(INSTALL), Some(&1));
+}
+
+#[test]
+fn goes_back_to_finding_wow_on_its_own() {
+    let world = World::new();
+    let fake = Fake::default();
+    let mut engine = world.engine(&fake);
+    assert_eq!(engine.roots(), std::slice::from_ref(&world.root));
+    engine.forget_wow();
+    assert_eq!(engine.state.wow, None);
+    assert_eq!(engine.roots(), lfgplus_helper::wow::usual_roots());
+    assert_eq!(State::load(&world.state).wow, None, "and remembers it");
+}
+
+#[test]
+fn remembers_saying_hello() {
+    let world = World::new();
+    let mut engine = world.engine(&Fake::default());
+    assert!(!engine.state.welcomed);
+    engine.set_welcomed();
+    assert!(State::load(&world.state).welcomed);
 }

@@ -222,4 +222,12 @@ mod tests {
         assert!(!text.contains("bad id"));
         assert!(text.contains("[\"aaaaaaaa11111111\"] = 2,"));
     }
+
+    /// tests/vectors/Acks.lua is what the helper writes for these acks. CI loads it in Lua 5.1, as the game does
+    /// (tests/lua/check-acks.lua), so the file the addon reads is proven to load, not just to look right.
+    #[test]
+    fn matches_the_vector_lua_loads() {
+        let vector = include_str!("../tests/vectors/Acks.lua").replace('\r', "");
+        assert_eq!(acks_text(&acks(&[("a1b2c3d4e5f60718", 812), ("ffffffff00000000", 3)])), vector);
+    }
 }

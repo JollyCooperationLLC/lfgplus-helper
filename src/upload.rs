@@ -37,11 +37,7 @@ impl HttpUploader {
             .max_redirects(0)
             .build()
             .into();
-        HttpUploader {
-            http,
-            api: api.trim_end_matches('/').to_owned(),
-            user_agent: format!("LFGPlusHelper/{}", env!("CARGO_PKG_VERSION")),
-        }
+        HttpUploader { http, api: api.trim_end_matches('/').to_owned(), user_agent: crate::user_agent() }
     }
 }
 

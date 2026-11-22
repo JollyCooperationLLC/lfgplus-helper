@@ -1,7 +1,9 @@
-# Every push and pull request: format, lint, tests and a release build on Windows, macOS and Linux; on macOS also the
-# app, universal (Apple Silicon and Intel) and signed ad hoc. Every push to main then publishes them as a GitHub release,
-# versioned by the commit's UTC time (year.month.day.hourminutesecond), so every job agrees on it. Actions are pinned to
-# a full commit SHA, as the organisation requires; the comment names the release.
+# Every push and pull request: format, lint, tests and a release build on Windows, macOS and Linux, each build started
+# once to prove it runs; on Linux also the acks file in real Lua 5.1; on macOS also the app, universal (Apple Silicon
+# and Intel), signed ad hoc, in a disk image that is opened and checked. Every push to main then publishes them as a
+# GitHub release. The version is the commit's UTC time (year.month.day.hourminutesecond), so every job agrees on it,
+# and it's built into the program. Actions are pinned to a full commit SHA, as the organisation requires; the comment
+# names the release.
 name: build
 
 on:
@@ -21,9 +23,17 @@ jobs:
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-      - name: Tray libraries (Linux)
+      - name: Version
+        shell: bash
+        run: echo "LFGPLUS_HELPER_VERSION=$(TZ=UTC git log -1 --format=%cd --date=format-local:%Y.%m.%d.%H%M%S)" >> "$GITHUB_ENV"
+      - name: Tray libraries and Lua 5.1 (Linux)
         if: runner.os == 'Linux'
-        run: sudo apt-get update && sudo apt-get install -y libgtk-3-dev libxdo-dev libayatana-appindicator3-dev
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libgtk-3-dev libxdo-dev libayatana-appindicator3-dev lua5.1
+      - name: The acks file loads in Lua 5.1 (Linux)
+        if: runner.os == 'Linux'
+        run: lua5.1 tests/lua/check-acks.lua tests/vectors/Acks.lua
       - name: Rust
         run: rustup toolchain install stable --profile minimal --component clippy,rustfmt && rustup default stable
       - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
@@ -31,6 +41,13 @@ jobs:
       - run: cargo clippy --all-targets -- -D warnings
       - run: cargo test
       - run: cargo build --release
+      - name: The build starts
+        shell: bash
+        run: |
+          exe=target/release/lfgplus-helper
+          if [ "$RUNNER_OS" = Windows ]; then exe="$exe.exe"; fi
+          test "$("$exe" --version | tr -d '\r')" = "$LFGPLUS_HELPER_VERSION"
+          "$exe" --list --state "$RUNNER_TEMP/smoke/state.txt"
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: lfgplus-helper-${{ runner.os }}
@@ -47,8 +64,16 @@ jobs:
           mkdir -p target/universal
           lipo -create -output target/universal/lfgplus-helper             target/aarch64-apple-darwin/release/lfgplus-helper target/x86_64-apple-darwin/release/lfgplus-helper
           lipo -info target/universal/lfgplus-helper
-          VERSION="$(TZ=UTC git log -1 --format=%cd --date=format-local:%Y.%m.%d.%H%M%S)"
-          bash tools/package-macos.sh "$VERSION" target/universal/lfgplus-helper
+          bash tools/package-macos.sh "$LFGPLUS_HELPER_VERSION" target/universal/lfgplus-helper
+      - name: The disk image opens and the app starts (macOS)
+        if: runner.os == 'macOS'
+        run: |
+          mount="$RUNNER_TEMP/dmg"
+          hdiutil attach -nobrowse -readonly -mountpoint "$mount" dist/lfgplus-helper-macos.dmg
+          test -L "$mount/Applications"
+          codesign --verify --deep --strict "$mount/LFG+ Helper.app"
+          test "$("$mount/LFG+ Helper.app/Contents/MacOS/lfgplus-helper" --version)" = "$LFGPLUS_HELPER_VERSION"
+          hdiutil detach "$mount"
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         if: runner.os == 'macOS'
         with:

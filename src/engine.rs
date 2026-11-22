@@ -17,14 +17,19 @@ pub const MAX_BACKOFF: u64 = 30 * 60;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Status {
-    /// No WoW folder found.
+    /// No WoW folder found in the usual places.
     NoWow,
+    /// No WoW in the folder the player chose.
+    NotInFolder,
     /// WoW found, but no LFG+ saved data in it yet.
     NoData,
     /// Everything waiting was sent. The last delivery, if any: (Unix seconds, lines).
     Ready(Option<(u64, u64)>),
     /// The last upload failed; it's tried again at the given time.
     Problem(UploadError, u64),
+    /// lfg.plus refused an upload, with this status. The other files went up; that one is tried again when the game
+    /// writes it again, or when the player asks.
+    Refused(u16),
 }
 
 /// A file's modification time and length: when either changes, the game wrote it again.
@@ -37,6 +42,8 @@ pub struct Engine<U: Uploader> {
     seen: HashMap<PathBuf, Stamp>,
     retry: Option<(u64, UploadError)>,
     backoff: u64,
+    /// Files whose last upload lfg.plus refused, and its status.
+    refused: HashMap<PathBuf, u16>,
     /// Lines for the log file, drained by the caller. Counts and paths only: never a record or anything from the file.
     pub journal: Vec<String>,
 }
@@ -51,6 +58,7 @@ impl<U: Uploader> Engine<U> {
             seen: HashMap::new(),
             retry: None,
             backoff: FIRST_BACKOFF,
+            refused: HashMap::new(),
             journal: Vec::new(),
         }
     }
@@ -66,8 +74,25 @@ impl<U: Uploader> Engine<U> {
     /// Uses another WoW folder from now on, and looks at everything in it again.
     pub fn choose_wow(&mut self, dir: PathBuf) {
         self.state.wow = Some(dir);
+        self.start_over();
+    }
+
+    /// Goes back to searching the usual places, and looks at everything again.
+    pub fn forget_wow(&mut self) {
+        self.state.wow = None;
+        self.start_over();
+    }
+
+    fn start_over(&mut self) {
         self.seen.clear();
+        self.refused.clear();
         self.retry = None;
+        self.save();
+    }
+
+    /// Remembers that the first-start window was shown.
+    pub fn set_welcomed(&mut self) {
+        self.state.welcomed = true;
         self.save();
     }
 
@@ -88,7 +113,13 @@ impl<U: Uploader> Engine<U> {
         let roots = self.roots();
         let files = wow::saved_files(&roots);
         if files.is_empty() {
-            return if roots.iter().any(|r| !wow::game_dirs(r).is_empty()) { Status::NoData } else { Status::NoWow };
+            return if roots.iter().any(|r| !wow::game_dirs(r).is_empty()) {
+                Status::NoData
+            } else if self.state.wow.is_some() {
+                Status::NotInFolder
+            } else {
+                Status::NoWow
+            };
         }
         let due = self.retry.as_ref().is_some_and(|(at, _)| now >= *at);
         if let Some((at, problem)) = &self.retry
@@ -104,7 +135,15 @@ impl<U: Uploader> Engine<U> {
                 continue;
             }
             match self.process(&file, now) {
-                Ok(count) => sent += count,
+                Ok(count) => {
+                    sent += count;
+                    self.refused.remove(&file.path);
+                }
+                // Something about this upload itself: sending it again won't help until it changes. The others go on.
+                Err(UploadError::Refused(code)) => {
+                    self.journal.push(format!("lfg.plus refused an upload from {} ({code})", file.path.display()));
+                    self.refused.insert(file.path.clone(), code);
+                }
                 Err(problem) => {
                     let at = now + self.backoff;
                     self.journal.push(format!("upload failed ({problem:?}); trying again in {} s", self.backoff));
@@ -122,7 +161,10 @@ impl<U: Uploader> Engine<U> {
             self.state.last_upload = Some((now, sent));
             self.save();
         }
-        Status::Ready(self.state.last_upload)
+        match self.refused.values().next() {
+            Some(code) => Status::Refused(*code),
+            None => Status::Ready(self.state.last_upload),
+        }
     }
 
     /// Sends one file's waiting lines and acks them. Returns how many lines were sent.
@@ -178,6 +220,7 @@ fn stamp(file: &SavedFile) -> Stamp {
 pub fn status_line(status: &Status, now: u64) -> String {
     match status {
         Status::NoWow => "Can't find World of Warcraft".into(),
+        Status::NotInFolder => "No World of Warcraft in the folder you chose".into(),
         Status::NoData => "No LFG+ data found yet".into(),
         Status::Ready(None) => "Nothing sent yet".into(),
         Status::Ready(Some((at, count))) => {
@@ -186,8 +229,8 @@ pub fn status_line(status: &Status, now: u64) -> String {
         }
         Status::Problem(UploadError::Unreachable, _) => "Can't reach lfg.plus. Trying again soon.".into(),
         Status::Problem(UploadError::Busy, _) => "lfg.plus is busy. Trying again soon.".into(),
-        Status::Problem(UploadError::Refused(code), _) => {
-            format!("lfg.plus refused the upload ({code}). Trying again later.")
+        Status::Problem(UploadError::Refused(code), _) | Status::Refused(code) => {
+            format!("lfg.plus refused an upload ({code}). Trying again after you play.")
         }
     }
 }
@@ -212,6 +255,7 @@ mod tests {
     fn says_where_things_stand() {
         let now = 1_000_000;
         assert_eq!(status_line(&Status::NoWow, now), "Can't find World of Warcraft");
+        assert_eq!(status_line(&Status::NotInFolder, now), "No World of Warcraft in the folder you chose");
         assert_eq!(status_line(&Status::NoData, now), "No LFG+ data found yet");
         assert_eq!(status_line(&Status::Ready(None), now), "Nothing sent yet");
         assert_eq!(status_line(&Status::Ready(Some((now - 5, 1))), now), "Sent 1 endorsement just now");
@@ -223,7 +267,11 @@ mod tests {
         assert_eq!(status_line(&Status::Problem(UploadError::Busy, 0), now), "lfg.plus is busy. Trying again soon.");
         assert_eq!(
             status_line(&Status::Problem(UploadError::Refused(400), 0), now),
-            "lfg.plus refused the upload (400). Trying again later."
+            "lfg.plus refused an upload (400). Trying again after you play."
+        );
+        assert_eq!(
+            status_line(&Status::Refused(413), now),
+            "lfg.plus refused an upload (413). Trying again after you play."
         );
     }
 
