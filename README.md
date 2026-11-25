@@ -115,7 +115,8 @@ can go too.
 | `--api URL` | Where lfg.plus answers (default `https://lfg.plus`, or the `LFGPLUS_API` environment variable) |
 | `--version` | Print the version, then exit |
 
-Started with any option, the helper doesn't copy itself to your programs folder.
+Started with any option, the helper doesn't copy itself to your programs folder or change what starts with your
+computer.
 
 ## Configuring
 
@@ -167,7 +168,7 @@ src/
   upload.rs         POST /api/v1/uploads
   acks.rs           the LFGPlus_Helper add-on that tells LFG+ what went up
   state.rs          the helper's settings file
-  startup.rs        on macOS, whether the app must be moved to Applications before it starts with the computer
+  startup.rs        when and how it starts with the computer; on macOS, whether it must be moved to Applications first
   icon.rs           reads the tray icon (an uncompressed TGA)
 assets/icon.tga     the tray icon: the LFG+ icon the addon shows, drawn a quarter larger
 assets/app.ico      the .exe's icon: the LFG+ wordmark from 48 px up, the bubble alone below that
@@ -217,7 +218,8 @@ macOS asks once before opening it. To build one locally:
 cargo build --release   # target/release/lfgplus-helper(.exe)
 ```
 
-A build without `LFGPLUS_HELPER_VERSION` is a development build: it never copies itself or looks for updates.
+A build without `LFGPLUS_HELPER_VERSION` is a development build: it never copies itself, changes what starts
+with your computer, or looks for updates.
 
 ### Development and testing methodology
 

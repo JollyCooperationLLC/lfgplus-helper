@@ -88,9 +88,9 @@ fn main() {
     run_tray(o, lock);
 }
 
-/// Where a plain start of a release build should copy itself, when it isn't running from there already.
+/// Where a player's own start should copy itself, when it isn't running from there already.
 fn install_target(o: &Options) -> Option<PathBuf> {
-    if !o.plain || update::parse(VERSION).is_none() {
+    if !startup::players_start(o.plain, VERSION) {
         return None;
     }
     let target = install::install_path()?;
@@ -187,7 +187,7 @@ fn autostart() -> Option<auto_launch::AutoLaunch> {
     let exe = std::env::current_exe().ok()?;
     auto_launch::AutoLaunchBuilder::new()
         .set_app_name(APP_NAME)
-        .set_app_path(exe.to_str()?)
+        .set_app_path(&startup::entry(exe.to_str()?))
         .set_macos_launch_mode(auto_launch::MacOSLaunchMode::LaunchAgent)
         .build()
         .ok()
@@ -198,6 +198,11 @@ fn apply_autostart(on: bool) -> bool {
     let Some(launch) = autostart() else { return false };
     let _ = if on { launch.enable() } else { launch.disable() };
     launch.is_enabled().unwrap_or(false)
+}
+
+/// Whether the helper starts with the computer, whichever copy of it that is.
+fn autostart_is_on() -> bool {
+    autostart().and_then(|launch| launch.is_enabled().ok()).unwrap_or(false)
 }
 
 /// Opens an address in the browser, or a file in the program the system uses for it.
@@ -248,7 +253,7 @@ fn must_move() -> bool {
     cfg!(target_os = "macos") && std::env::current_exe().is_ok_and(|exe| startup::must_move(&exe))
 }
 
-fn build_tray(autostart_on: bool, move_first: bool, chosen: bool) -> Option<Tray> {
+fn build_tray(autostart_on: bool, may_register: bool, move_first: bool, chosen: bool) -> Option<Tray> {
     let (rgba, w, h) = decode_tga(include_bytes!("../assets/icon.tga"))?;
     let icon = Icon::from_rgba(zoomed(&rgba, w, h, TRAY_ZOOM), w, h).ok()?;
     let status = MenuItem::new("Starting…", false, None);
@@ -258,7 +263,7 @@ fn build_tray(autostart_on: bool, move_first: bool, chosen: bool) -> Option<Tray
     let start = if move_first {
         CheckMenuItem::new("Move to Applications to start with your Mac", false, false, None)
     } else {
-        CheckMenuItem::new("Start with my computer", true, autostart_on, None)
+        CheckMenuItem::new("Start with my computer", may_register, autostart_on, None)
     };
     let site = MenuItem::new("Open lfg.plus", true, None);
     let log = MenuItem::new("Open log", true, None);
@@ -308,14 +313,16 @@ fn run_tray(o: Options, _lock: File) {
         let _ = menu_proxy.send_event(UserEvent::Menu(e));
     }));
 
-    // The first run starts with the computer; after that the player's choice stands. An app that must be moved first
-    // registers nothing and decides nothing until it has been. Starting it again points it at this copy.
+    // The first run starts with the computer; after that the player's choice stands. Starting it again points it at
+    // this copy. An app that must be moved first, a build someone is working on and a run with options register
+    // nothing and decide nothing.
     let saved = State::load(&o.state);
     let wanted = saved.autostart.unwrap_or(true);
     let move_first = must_move();
-    let autostart_on = !move_first && apply_autostart(wanted);
+    let may_register = !move_first && startup::players_start(o.plain, VERSION);
+    let autostart_on = if may_register { apply_autostart(wanted) } else { !move_first && autostart_is_on() };
     let worker = spawn_worker(&o, proxy);
-    if saved.autostart.is_none() && !move_first {
+    if saved.autostart.is_none() && may_register {
         let _ = worker.send(Command::Autostart(wanted));
     }
     let state_file = o.state.clone();
@@ -327,7 +334,7 @@ fn run_tray(o: Options, _lock: File) {
         match event {
             // The tray is made once the loop runs, as macOS requires.
             Event::NewEvents(StartCause::Init) => {
-                tray = build_tray(autostart_on, move_first, saved.wow.is_some());
+                tray = build_tray(autostart_on, may_register, move_first, saved.wow.is_some());
                 if tray.is_none() {
                     *control_flow = ControlFlow::Exit;
                     return;

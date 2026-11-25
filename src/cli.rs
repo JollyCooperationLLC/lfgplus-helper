@@ -24,7 +24,8 @@ pub struct Options {
     pub once: bool,
     pub list: bool,
     pub version: bool,
-    /// Started with no options at all, as a player starts it: only then does it install itself.
+    /// Started with no options at all, as a player starts it: only then does it install itself or
+    /// change what starts with the computer.
     pub plain: bool,
 }
 
